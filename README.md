@@ -7,7 +7,14 @@ The following is a real-life example of one way to implement a CKShare:
 2. If your request succeeds (1a) and the zone exists (1b), you should see if you can discover the share participants.
 3. If your request succeeds (2a) and the participants exist (2b), you should attempt to save the share.
 
-Since all three steps are asynchronous operations, you'd usually see something like this:
+As you can see, there are plenty of failure points:
+1a. request may fail or time out
+1b. the zone may not exist
+2a. request may fail or time out
+2b. the user may not exist
+3. request may fail or time out
+
+Since all three steps are asynchronous operations, you'd usually see something like the following snippet. Note that finding the failure points in the following piece of code is difficult.
 ```
 func attemptToShare(groupViewModel: GroupViewModel, from controller: UIViewController) {
 		
@@ -63,6 +70,15 @@ func attemptToShare(groupViewModel: GroupViewModel, from controller: UIViewContr
 
 The main issue is obvious: the code is not readable. Debugging is difficult, especially since we will not be printing, but handling errors in some way. This will add to code complexity and the method can easily become cumbersome.
 
+Failure points are found in:
+1a. request may fail or time out (line 65, indentation level 3)
+1b. the zone may not exist (line 30, indentation level 4)
+2a. request may fail or time out (line 60, indentation level 5)
+2b. the user may not exist (line 42, indentation level 6)
+3. request may fail or time out (line 55, indentation level 7)
+
+Errors interfere with the reading flow, they get increasingly difficult to find as we go deeper into async hell, and errors in the first steps appear closer to the bottom, which is unintuitive.
+
 # Proposed Solution
 Use a simple function that transforms an asynchronous, completion-based, Result function into a synchronous throwing function.
 
@@ -110,8 +126,22 @@ func attemptToShare(groupViewModel: GroupViewModel, from controller: UIViewContr
     catch let error as CloudKitCoordinator.ShareError {
         print("Failed sharing record")
     }
-    catch { 
+    catch let error as AwaitError { 
+        print("Operation timed out")
+    }
+    catch {
         print("Unknown error occurred")
     }
 }
 ```
+
+Failure points are found in:
+1a. request may fail or time out (line 121, indentation level 2)
+1b. the zone may not exist (line 96, indentation level 3)
+2a. request may fail or time out (line 124, indentation level 2)
+2b. the user may not exist (line 107, indentation level 3)
+3. request may fail or time out (line 127, indentation level 2)
+
+- Errors do not interfere with the reading flow. The happy path is immediately visible and easy to follow.
+- Errors do not get increasingly difficult to find. Errors coming form async functions are after the happy path and errors coming from business logic are inside the happy path flow. 
+- Errors in the first steps appear closer to the top, which is unintuitive.
