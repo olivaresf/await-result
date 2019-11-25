@@ -1,8 +1,7 @@
 # await-result
 A simple function that transforms an asynchronous, completion-based, Result function into a synchronous, throwing function.
 
-This is function I built to reduce async hell in Swift.
-
+# The Problem
 The following is a real-life example of one way to implement a CKShare:
 1. You must first find if your share zone exists.
 2. If your request succeeds (1a) and the zone exists (1b), you should see if you can discover the share participants.
@@ -62,7 +61,10 @@ func attemptToShare(groupViewModel: GroupViewModel, from controller: UIViewContr
 }
 ```
 
-to this:
+The main issue is obvious: the code is not readable. Debugging is difficult, especially since we will not be printing, but handling errors in some way. This will add to code complexity and the method can easily become cumbersome.
+
+# Proposed Solution
+Use a simple function that transforms an asynchronous, completion-based, Result function into a synchronous throwing function.
 
 ```
 func attemptToShare(groupViewModel: GroupViewModel, from controller: UIViewController) {
