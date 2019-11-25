@@ -1,5 +1,5 @@
 # await-result
-A simple function that transforms an asynchronous, completion-based function into a synchronous, throwing function.
+A simple function that transforms an asynchronous, completion-based, Result function into a synchronous, throwing function.
 
 This is function I built to reduce async hell in Swift.
 
