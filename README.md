@@ -157,3 +157,76 @@ Failure points are found in:
 - Errors do not interfere with the reading flow. The happy path is immediately visible and easy to follow.
 - Errors do not get increasingly difficult to find. Errors coming form async functions are after the happy path and errors coming from business logic are inside the happy path flow. 
 - Errors in the first steps appear closer to the top, which is unintuitive.
+
+# How to use it.
+
+Take the first zone function in our example above. It has a function signature like so:
+```func zoneExists(zoneName: String, completion: @escaping ((Result<ZoneState, ZoneExistsError>) -> Void)) {```
+
+If we want to use `await-result` the function to be transformed _must_:
+1. use Result as the only parameter in its completion block
+2. be asynchronous.
+
+Iff both of those are true, we can use `await` like so:
+
+```
+let zoneState = try await(asyncExecutionBlock: { asyncExecutionCompletedBlock in
+    zoneExists(zoneName: aName) { zoneExistsResult in
+        asyncExecutionCompletedBlock(zoneExistsResult)
+    }
+})
+```
+
+`await` will receive a block where the asynchronous code happens (asyncExecutionBlock). In the example above, asyncExecutionBlock is where we do our network call to see if the zone exists.
+
+Once asyncExecutionBlock finishes, it, in turn, must call a completion block (asyncExecutionCompletedBlock) and hand over its Result.
+
+The implementation's pseudo-code for `await` looks something like this:
+```
+func await(execution: @escaping (ExecutionCompletedBlock) -> Void)...
+
+typealias ExecutionCompletedBlock = @escaping (Result<T, U>) -> Void
+```
+
+(Sidenote: Unfortunately, Swift's typealias does not currently support generics. I've only added it for clarity)
+
+Now that `await` has its asyncExecutionBlock, it will:
+1. Set up a semaphore that will block the thread `await` is being called on.
+2. Execute asyncExecutionBlock
+3. Tell the semaphore to wait and block the thread.
+4. Once asyncExecutionBlock sends its Result by calling asyncExecutionCompletedBlock, it will decompose the Result into either success or failure and save whichever is unpacked.
+5. Once it has the unpacked result, it unblocks the thread.
+6. Then it checks if there was an error. If there was, throw.
+7. If no errors were present, it returns the success value.
+
+In the case of our example, the function `zoneExists` returns a result of type `Result<ZoneState, ZoneExistsError>`. Using type inference, `await` will `throw ZoneExistsError` if step 6 fails and it will return a `ZoneState` object if step 7 succeeds. 
+
+Now that we know all this, we can simplify the code:
+
+``````
+0. Original code.
+let zoneState = try await(asyncExecutionBlock: { asyncExecutionCompletedBlock in
+    zoneExists(zoneName: aName) { zoneExistsResult in
+        asyncExecutionCompletedBlock(zoneExistsResult)
+    }
+})
+
+1. Remove the label for `asyncExecutionBlock`.
+let zoneState = try await { asyncExecutionCompletedBlock in
+    zoneExists(zoneName: aName) { zoneExistsResult in
+        asyncExecutionCompletedBlock(zoneExistsResult)
+    }
+}
+
+2. Since we're only passing along our result, zoneExistsResult's label is unnecessary.
+let zoneState = try await { asyncExecutionCompletedBlock in
+    zoneExists(zoneName: aName) {
+        asyncExecutionCompletedBlock($0)
+    }
+}
+
+3. Compress spacing to increase readability
+let zoneState = try await { finished in
+    zoneExists(zoneName: aName) { finished($0) }
+}
+```
