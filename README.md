@@ -178,38 +178,32 @@ let zoneState = try await(asyncExecutionBlock: { asyncExecutionCompletedBlock in
 })
 ```
 
-`await` will receive a block where the asynchronous code happens (asyncExecutionBlock). In the example above, asyncExecutionBlock is where we do our network call to see if the zone exists.
+1. 
 
-Once asyncExecutionBlock finishes, it, in turn, must call a completion block (asyncExecutionCompletedBlock) and hand over its Result.
+2. 
 
-The implementation's pseudo-code for `await` looks something like this:
-
-```
-func await(execution: @escaping (ExecutionCompletedBlock) -> Void)...
-
-typealias ExecutionCompletedBlock = @escaping (Result<T, U>) -> Void
-```
-
-(Sidenote: Unfortunately, Swift's typealias does not currently support generics. I've only added it for clarity)
+3.  
 
 Now that `await` has its asyncExecutionBlock, it will:
 
 1. Set up a semaphore that will block the thread `await` is being called on.
 
-2. Execute asyncExecutionBlock
+2. Call  `asyncExecutionBlock`
 
 3. Tell the semaphore to wait and block the thread.
 
-4. Once asyncExecutionBlock sends its Result by calling asyncExecutionCompletedBlock, it will decompose the Result into either success or failure and save whichever is unpacked.
+4. When `asyncExecutionBlock` finishes its asynchronous code (in this case, the network operation), it will pass its `Result` to `asyncExecutionCompletedBlock`.
 
-5. Once it has the unpacked result, it unblocks the thread.
+5. `await` will unpack the `Result` and unblock the thread. 
 
-6. Then it checks if there was an error. If there was, throw.
+6. by infering the types from the `Result` it will...
 
-7. If no errors were present, it returns the success value.
+6a. return the Success object (`return .success(let zoneState)`) 
 
+or 
 
-In the case of our example, the function `zoneExists` returns a result of type `Result<ZoneState, ZoneExistsError>`. Using type inference, `await` will `throw ZoneExistsError` if step 6 fails and it will return a `ZoneState` object if step 7 succeeds. 
+6b. throw the Failure object (`throw .failure(let ZoneExistsError)`.
+
 
 Now that we know all this, we can simplify the code.
 
