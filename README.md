@@ -71,11 +71,17 @@ func attemptToShare(groupViewModel: GroupViewModel, from controller: UIViewContr
 The main issue is obvious: the code is not readable. Debugging is difficult, especially since we will not be printing, but handling errors in some way. This will add to code complexity and the method can easily become cumbersome.
 
 Failure points are found in:
+
 1a. request may fail or time out (line 65, indentation level 3)
+
 1b. the zone may not exist (line 30, indentation level 4)
+
 2a. request may fail or time out (line 60, indentation level 5)
+
 2b. the user may not exist (line 42, indentation level 6)
+
 3. request may fail or time out (line 55, indentation level 7)
+
 
 Errors interfere with the reading flow, they get increasingly difficult to find as we go deeper into async hell, and errors in the first steps appear closer to the bottom, which is unintuitive.
 
