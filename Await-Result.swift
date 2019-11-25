@@ -8,16 +8,18 @@
 import Foundation
 
 enum AwaitError : Error {
-	case timeOut
+	case timeOut(identifier: String)
 }
 
-func await<T, U>(timeout: DispatchTime? = nil, execution: @escaping (@escaping (Result<T, U>) -> Void) -> Void) throws -> T {
+typealias AsyncExecutionCompletedBlock<T, U: Error> = (Result<T, U>) -> Void
+
+func await<T, U: Error>(identifier: String? = nil, timeout: DispatchTime? = nil, asyncExecutionBlock: @escaping (@escaping AsyncExecutionCompletedBlock<T, U>) -> Void) throws -> T {
 	
 	let semaphore = DispatchSemaphore(value: 0)
 	var possibleSuccess: T? = nil
 	var possibleError: U? = nil
 	
-	execution { result in
+	asyncExecutionBlock { result in
 		switch result {
 		case .success(let success): possibleSuccess = success
 		case .failure(let error): possibleError = error
@@ -31,7 +33,7 @@ func await<T, U>(timeout: DispatchTime? = nil, execution: @escaping (@escaping (
 	}
 	
 	guard let success = possibleSuccess else {
-		throw AwaitError.timeOut
+		throw AwaitError.timeOut(identifier: UUID().uuidString)
 	}
 	
 	return success
