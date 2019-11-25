@@ -142,11 +142,17 @@ func attemptToShare(groupViewModel: GroupViewModel, from controller: UIViewContr
 ```
 
 Failure points are found in:
+
 1a. request may fail or time out (line 121, indentation level 2)
+
 1b. the zone may not exist (line 96, indentation level 3)
+
 2a. request may fail or time out (line 124, indentation level 2)
+
 2b. the user may not exist (line 107, indentation level 3)
+
 3. request may fail or time out (line 127, indentation level 2)
+
 
 - Errors do not interfere with the reading flow. The happy path is immediately visible and easy to follow.
 - Errors do not get increasingly difficult to find. Errors coming form async functions are after the happy path and errors coming from business logic are inside the happy path flow. 
