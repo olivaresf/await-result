@@ -7,7 +7,14 @@ The following is a real-life example of one way to implement a CKShare:
 2. If your request succeeds (1a) and the zone exists (1b), you should see if you can discover the share participants.
 3. If your request succeeds (2a) and the participants exist (2b), you should attempt to save the share.
 
-Since all three steps are asynchronous operations, you'd usually see something like this:
+As you can see, there are plenty of failure points:
+1a. request may fail or time out
+1b. the zone may not exist
+2a. request may fail or time out
+2b. the user may not exist
+3. request may fail or time out
+
+Since all three steps are asynchronous operations, you'd usually see something like the following snippet. Note that finding the failure points in the following piece of code is difficult.
 ```
 func attemptToShare(groupViewModel: GroupViewModel, from controller: UIViewController) {
 		
@@ -63,6 +70,21 @@ func attemptToShare(groupViewModel: GroupViewModel, from controller: UIViewContr
 
 The main issue is obvious: the code is not readable. Debugging is difficult, especially since we will not be printing, but handling errors in some way. This will add to code complexity and the method can easily become cumbersome.
 
+Failure points are found in:
+
+1a. request may fail or time out (line 65, indentation level 3)
+
+1b. the zone may not exist (line 30, indentation level 4)
+
+2a. request may fail or time out (line 60, indentation level 5)
+
+2b. the user may not exist (line 42, indentation level 6)
+
+3. request may fail or time out (line 55, indentation level 7)
+
+
+Errors interfere with the reading flow, they get increasingly difficult to find as we go deeper into async hell, and errors in the first steps appear closer to the bottom, which is unintuitive.
+
 # Proposed Solution
 Use a simple function that transforms an asynchronous, completion-based, Result function into a synchronous throwing function.
 
@@ -110,8 +132,111 @@ func attemptToShare(groupViewModel: GroupViewModel, from controller: UIViewContr
     catch let error as CloudKitCoordinator.ShareError {
         print("Failed sharing record")
     }
-    catch { 
+    catch let error as AwaitError { 
+        print("Operation timed out")
+    }
+    catch {
         print("Unknown error occurred")
     }
+}
+```
+
+Failure points are found in:
+
+1a. request may fail or time out (line 121, indentation level 2)
+
+1b. the zone may not exist (line 96, indentation level 3)
+
+2a. request may fail or time out (line 124, indentation level 2)
+
+2b. the user may not exist (line 107, indentation level 3)
+
+3. request may fail or time out (line 127, indentation level 2)
+
+
+- Errors do not interfere with the reading flow. The happy path is immediately visible and easy to follow.
+- Errors do not get increasingly difficult to find. Errors coming form async functions are after the happy path and errors coming from business logic are inside the happy path flow. 
+- Errors in the first steps appear closer to the top, which is unintuitive.
+
+# How to use it.
+
+Take the first zone function in our example above. It has a function signature like so:
+
+```func zoneExists(zoneName: String, completion: @escaping ((Result<ZoneState, ZoneExistsError>) -> Void)) {```
+
+If we want to use `await-result` the function to be transformed _must_:
+1. use Result as the only parameter in its completion block
+2. be asynchronous.
+
+Iff both of those are true, we can use `await` like so:
+
+```
+let zoneState = try await(asyncExecutionBlock: { asyncExecutionCompletedBlock in
+    zoneExists(zoneName: aName) { zoneExistsResult in
+        asyncExecutionCompletedBlock(zoneExistsResult)
+    }
+})
+```
+
+1. 
+
+2. 
+
+3.  
+
+Now that `await` has its asyncExecutionBlock, it will:
+
+1. Set up a semaphore that will block the thread `await` is being called on.
+
+2. Call  `asyncExecutionBlock`
+
+3. Tell the semaphore to wait and block the thread.
+
+4. When `asyncExecutionBlock` finishes its asynchronous code (in this case, the network operation), it will pass its `Result` to `asyncExecutionCompletedBlock`.
+
+5. `await` will unpack the `Result` and unblock the thread. 
+
+6. by infering the types from the `Result` it will...
+
+6a. return the Success object (`return .success(let zoneState)`) 
+
+or 
+
+6b. throw the Failure object (`throw .failure(let ZoneExistsError)`.
+
+
+Now that we know all this, we can simplify the code.
+
+```
+0. Original code.
+let zoneState = try await(asyncExecutionBlock: { asyncExecutionCompletedBlock in
+    zoneExists(zoneName: aName) { zoneExistsResult in
+        asyncExecutionCompletedBlock(zoneExistsResult)
+    }
+})
+```
+
+Remove the label for `asyncExecutionBlock`.
+```
+let zoneState = try await { asyncExecutionCompletedBlock in
+    zoneExists(zoneName: aName) { zoneExistsResult in
+        asyncExecutionCompletedBlock(zoneExistsResult)
+    }
+}
+```
+
+2. Since we're only passing along our result, zoneExistsResult's label is unnecessary.
+```
+let zoneState = try await { asyncExecutionCompletedBlock in
+    zoneExists(zoneName: aName) {
+        asyncExecutionCompletedBlock($0)
+    }
+}
+```
+
+3. Compress spacing to increase readability
+```
+let zoneState = try await { finished in
+    zoneExists(zoneName: aName) { finished($0) }
 }
 ```
